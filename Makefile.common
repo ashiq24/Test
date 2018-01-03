@@ -49,10 +49,11 @@ THREAD_H =../threads/copyright.h\
 	../machine/sysdep.h\
 	../machine/stats.h\
 	../machine/timer.h\
-	../machine/console.h\
 	../threads/preemptive.h\
 	../threads/producer.h\
-	../threads/consumer.h
+	../threads/consumer.h\
+	../threads/sharedBuffer.h
+
 
 THREAD_C =../threads/main.cc\
 	../threads/scheduler.cc\
@@ -65,28 +66,36 @@ THREAD_C =../threads/main.cc\
 	../machine/sysdep.cc\
 	../machine/stats.cc\
 	../machine/timer.cc\
-	../machine/console.cc\
 	../threads/preemptive.cc\
 	../threads/producer.cc\
-	../threads/consumer.cc
+	../threads/consumer.cc\
+	../threads/sharedBuffer.cc
 
 THREAD_S = ../threads/switch.s
 
 THREAD_O =main.o scheduler.o synch.o system.o thread.o \
 	utility.o threadtest.o interrupt.o stats.o sysdep.o timer.o \
-	preemptive.o producer.o consumer.o console.o
+	preemptive.o producer.o consumer.o sharedBuffer.o
 
 USERPROG_H = ../userprog/addrspace.h\
 	../userprog/bitmap.h\
+	../userprog/processTable.h\
 	../userprog/memoryManager.h\
+	../userprog/swap.h\
+	../userprog/synchronizedConsole.h\
 	../filesys/filesys.h\
 	../filesys/openfile.h\
+	../machine/console.h\
 	../machine/machine.h\
 	../machine/mipssim.h\
 	../machine/translate.h
 
 USERPROG_C = ../userprog/addrspace.cc\
 	../userprog/bitmap.cc\
+	../userprog/processTable.cc\
+	../userprog/memoryManager.cc\
+	../userprog/swap.cc\
+	../userprog/synchronizedConsole.cc\
 	../userprog/exception.cc\
 	../userprog/progtest.cc\
 	../machine/console.cc\
@@ -94,8 +103,9 @@ USERPROG_C = ../userprog/addrspace.cc\
 	../machine/mipssim.cc\
 	../machine/translate.cc
 
-USERPROG_O = addrspace.o bitmap.o exception.o progtest.o machine.o \
-	mipssim.o translate.o
+USERPROG_O = addrspace.o bitmap.o exception.o progtest.o console.o machine.o \
+	mipssim.o translate.o processTable.o\
+	memoryManager.o swap.o synchronizedConsole.o
 
 VM_H =
 VM_C =

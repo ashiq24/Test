@@ -1,19 +1,31 @@
+#ifndef PRODUCER_H
+#define PRODUCER_H
+
+
+#include "system.h"
 #include "synch.h"
-#include "list.h"
+#include "sharedBuffer.h"
 
-extern List<int> buffer;
-extern int full, empty;
-extern Lock bufAcc, isEmptyLock, isFullLock;
-extern Condition isEmpty, isFull;
+class Producer
+{
+private:
+    const char* name;                      // debugging purpose
+    Lock* tableAccessLock;                  // Permission for going to food table
+    Condition* produceCondition;
+    Condition* consumeCondition;
+    SharedBuffer* foodTable;
 
-class Producer {
-   public:
-      Producer(const char *debugName);
-      ~Producer();
-      
-      static void produce(void *arg);
-      const char* getName() { return name; }
-   
-   private:
-      const char *name;
+    static int foodNumber;
+
+
+    void Produce();
+
+
+public:
+    Producer(const char* debugName, Lock* tableLock,
+             Condition* produceCondition, Condition* consumeCondition, SharedBuffer* foodTable);
+    void StartProducing();
 };
+
+
+#endif // PRODUCER_H

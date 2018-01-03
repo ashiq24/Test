@@ -1,31 +1,52 @@
 #include "consumer.h"
-#include "unistd.h"
 
-Consumer::Consumer(const char *debugName) {
-   name = debugName;
+Consumer::Consumer(const char* debugName, Lock* tableLock, Condition* produceCondition, Condition* consumeCondition, SharedBuffer* foodTable)
+{
+    name = debugName;
+    tableAccessLock = tableLock;
+    this->produceCondition = produceCondition;
+    this->consumeCondition = consumeCondition;
+    this->foodTable = foodTable;
 }
 
-Consumer::~Consumer() {}
+void Consumer::Consume()
+{
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);	// disable interrupts
 
-void Consumer::consume(void *arg) {
-   const char *name = ((Consumer *)arg)->name;
-   while(true) {
-      bufAcc.Acquire();
-      if(!full) {
-         bufAcc.Release();
-         isEmptyLock.Acquire();
-         isEmpty.Wait();
-         isEmptyLock.Release();
-      } else {
-         int x = buffer.Remove();
-         printf("Consumer %s consumed %d\n", name, x);
-         full--;
-         empty++;
-         sleep(1);
-         bufAcc.Release();
-         isFullLock.Acquire();
-         isFull.Signal();
-         isFullLock.Release();
-      }
-   }
+    for(long i = 0; i < CONSUMPTION_DELAY; i++) {}
+
+    tableAccessLock->Acquire();
+
+    if(foodTable->IsEmpty())
+    {
+        printf("\n\n---------------Table empty. %s is blocked---------------\n\n\n", currentThread->getName());
+        consumeCondition->Wait();
+    }
+
+    else
+    {
+        int foodNumber = foodTable->GetItem();
+        printf("[---]   %s consumed %d\n", name, foodNumber);
+        produceCondition->Signal();
+    }
+
+    tableAccessLock->Release();
+
+    interrupt->SetLevel(oldLevel);		// re-enable interrupts
+
+    for(long i = 0; i < CONSUMPTION_DELAY; i++) {}
+}
+
+
+void Consumer::StartConsuming()
+{
+    while(true)
+    {
+        Consume();
+    }
+
+//    for(int i = 0; i<10; i++)
+//    {
+//        Consume();
+//    }
 }

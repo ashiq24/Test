@@ -24,8 +24,15 @@
 #include "copyright.h"
 #include "system.h"
 #include "syscall.h"
+#include "memoryManager.h"
 #include "processTable.h"
-#include "thread.h"
+#include "addrspace.h"
+#include "synchronizedConsole.h"
+#include "synch.h"
+
+extern MemoryManager* memoryManager;
+extern ProcessTable*  processTable;
+extern SynchronizedConsole* synchronizedConsole;
 
 //----------------------------------------------------------------------
 // ExceptionHandler
@@ -50,23 +57,27 @@
 //	are in machine.h.
 //----------------------------------------------------------------------
 
-void PCForward()
+void ForwardPC()
 {
-	int pc = machine->ReadRegister(PCReg);
-	machine->WriteRegister(PrevPCReg, pc);
-	pc = machine->ReadRegister(NextPCReg);
-	machine->WriteRegister(PCReg, pc);
-	pc += 4;
-	machine->WriteRegister(NextPCReg, pc);
+    int pc;
+
+    pc = machine->ReadRegister(PCReg);
+    machine->WriteRegister(PrevPCReg, pc);
+
+    pc = machine->ReadRegister(NextPCReg);
+    machine->WriteRegister(PCReg, pc);
+
+    pc += 4;
+    machine->WriteRegister(NextPCReg, pc);
 }
 
-void Dummy(void* arg)
+void DummyForFork(void* arg)
 {
-	(currentThread->space)->InitRegisters();
-	(currentThread->space)->RestoreState();
-	machine->Run();
+    (currentThread->space)->InitRegisters();
+    (currentThread->space)->RestoreState();
+    machine->Run();
 
-	return;
+    return;
 }
 
 void SysCallHaltHandler();
@@ -75,200 +86,254 @@ void SysCallExitHandler();
 void SysCallReadHandler();
 void SysCallWriteHandler();
 
+void PageFaultExceptionHandler();
 
 void
 ExceptionHandler(ExceptionType which)
 {
     int type = machine->ReadRegister(2);
-    printf("Inside ExceptionHandler\n");
-	switch (which)
-	{
-		case SyscallException:
-		    printf("Inside SyscallException\n");
-			switch (type)
-			{
-				case SC_Halt:
-					SysCallHaltHandler();
-					break;
+    switch (which)
+    {
+    case SyscallException:
+        DEBUG('z', "\nInside SyscallException from thread %d.\n", currentThread->threadID);
+        DEBUG('z',"### SyscallException Type: %d ###\n", type);
 
-				case SC_Exec:
-					SysCallExecHandler();
-					break;
+        switch (type)
+        {
+        case SC_Halt:
+            SysCallHaltHandler();
+            break;
 
-				case SC_Exit:
-					SysCallExitHandler();
-					break;
+        case SC_Exec:
+            SysCallExecHandler();
+            break;
 
-				case SC_Read:
-					SysCallReadHandler();
-					break;
+        case SC_Exit:
+            SysCallExitHandler();
+            break;
 
-				case SC_Write:
-				default:
-					break;
-			}
-			break;
+        case SC_Read:
+            SysCallReadHandler();
+            break;
 
-		case PageFaultException:
-			DEBUG('e', "Page Fault Exception\n");
-			PCForward();
-			break;
+        case SC_Write:
+            SysCallWriteHandler();
+        default:
+            break;
+        }
+        ForwardPC(); // this has to be done after every instruction
+        break;
 
-		case ReadOnlyException:
-			DEBUG('e', "Read Onle Exception\n");
-			PCForward();
-			break;
+    case PageFaultException:
+        // printf("PageFaultException\n");
+        PageFaultExceptionHandler();
+        break;
 
-		case BusErrorException:
-			DEBUG('e', "Bus Error Exception\n");
-			PCForward();
-			break;
+    case ReadOnlyException:
+        printf("Read Only Exception\n");
+        SysCallExitHandler();
+        break;
 
-		case OverflowException:
-			DEBUG('e', "Overflow Exception\n");
-			PCForward();
-			break;
+    case BusErrorException:
+        printf("Bus Error Exception\n");
+        SysCallExitHandler();
+        break;
 
-		case IllegalInstrException:
-			DEBUG('e', "Illegal Instruction Exception\n");
-			PCForward();
-			break;
+    case OverflowException:
+        printf("Overflow Exception\n");
+        SysCallExitHandler();
+        break;
 
-		case NumExceptionTypes:
-			DEBUG('e', "Num Exception Types\n");
-			PCForward();
-			break;
+    case IllegalInstrException:
+        printf("Illegal Instruction Exception\n");
+        SysCallExitHandler();
+        break;
 
-		default:
-			printf("Unexpected user mode exception %d %d\n", which, type);
-			break;
-	}
+    case NumExceptionTypes:
+        printf("Num Exception Types\n");
+        SysCallExitHandler();
+        break;
+
+    default:
+        printf("Unexpected user mode exception %d %d\n", which, type);
+        SysCallExitHandler();
+        break;
+    }
 }
 
 void
 SysCallHaltHandler()
 {
-	DEBUG('a', "Shutdown, initiated by user program.\n");
-	interrupt->Halt();
-	PCForward();
+    DEBUG('a', "Shutdown, initiated by user program.\n");
+    interrupt->Halt();
 
-	return;
+    return;
 }
 
 
 void
 SysCallExecHandler()
 {
-	char fileName[100];
-	int arg = machine->ReadRegister(4);
-	int i = 0;
+    int fileNameLength = machine->ReadRegister(5);
+    char* fileName = new char[fileNameLength + 1];
+    // It is bad practice to create a fixed-size buffer.
+    // For example, char* fileName = new char[100] is bad.
+    // Should get the length first and then initialize the buffer, ...
+    // ... like I did here (like a boss :D ).
 
-	do
-	{
-		machine->ReadMem(arg + i, 1, (int*)&fileName[i]);
+    int addr = machine->ReadRegister(4);
+    int i = 0;
+    do
+    {
+        if(!machine->ReadMem(addr + i, 1, (int*)&fileName[i]))
+        {
+            delete fileName;
+            fileNameLength = machine->ReadRegister(5);
+            fileName = new char[fileNameLength + 1];
 
-	} while(fileName[i++] != '\0');
+            machine->ReadMem(addr + i, 1, (int*)&fileName[i]);
+            // first ReadMem may fail since the page might not be in memory
+        }
+    }
+    while(fileName[i++] != '\0');
 
-
-	OpenFile* executable = fileSystem->Open(fileName);
-	if (executable == NULL)
+    OpenFile* executable = fileSystem->Open(fileName);
+    if (executable == NULL)
     {
         printf("Unable to open file %s\n", fileName);
-		machine->WriteRegister(2, 0);
-		PCForward();
+        machine->WriteRegister(2, -1);
         return;
     }
 
-	Thread* thread = new Thread(fileName);
-	AddrSpace* space = new AddrSpace(executable);
-	thread->space=space;
-	int ret = pTable->Alloc((void*)thread);
-	delete executable;
+    Thread* thread = new Thread(fileName);
+    int returnValue = processTable->Alloc((void*)thread);
+    thread->threadID = returnValue;
+    if(returnValue == -1)
+    {
+        printf("Allocation failed\n" );
+        return;
+    }
 
-	if(ret == -1)
-	{
-		printf("Allocation failed\n" );
-		PCForward();
-		return;
-	}
+    AddrSpace* space = new AddrSpace(executable, returnValue);
+    thread->space=space;
 
-	thread->pid = ret;
-	machine->WriteRegister(2, ret);
-	thread->Fork(Dummy, NULL);
-	PCForward();
+    DEBUG('z', "%d inserted in processTable\n", thread->threadID);
+    machine->WriteRegister(2, returnValue);
 
-	return;
+    delete fileName;   // free the buffer memory storing the name
+
+    thread->Fork(DummyForFork, NULL);
+
+    return;
 }
 
 void
 SysCallExitHandler()
 {
-	int arg = machine->ReadRegister(4);
-	int index = currentThread->pid;
+    DEBUG('z',"Inside Exit\n");
+    int exitCode = machine->ReadRegister(4);
+    printf("-------------------------------------\n");
+    printf("Exiting process: %d. Exit code: %d\n", currentThread->threadID, exitCode);
+    printf("-------------------------------------\n");
 
-	pTable->Release(index);
-	currentThread->space->ReleaseMemory();
-	currentThread->Finish();
+    currentThread->space->ReleaseMemory();
+    delete currentThread->space;
 
-	PCForward();
+    int index = currentThread->threadID;	// index in processTable
+    processTable->Release(index);
 
-	return;
+    int processCount = processTable->GetProcessCount();
+    if(processCount == 0)	// last process
+    {
+        interrupt->Halt();
+    }
+    // else
+    currentThread->Finish();
+
+    return;
 }
+
 
 void
 SysCallReadHandler()
 {
-	printf("here now\n");
-	unsigned int addr = machine->ReadRegister(4);
-	unsigned int size = machine->ReadRegister(5);
-	//unsigned int id = machine->ReadRegister(6);
+    unsigned int addr = machine->ReadRegister(4);
+    unsigned int size = machine->ReadRegister(5);
 
-	char* buffer = new char[size];
+    synchronizedConsole->GetLock();
 
-	for(int i = 0; i < size; i++)
-	{
-		_readAvail->P();
-		buffer[i] = _console->GetChar();
-	}
-	buffer[size] = '\0';
-	printf("%s\n",buffer );
-	for(int i = 0; i < size;i++)
-	{
-		machine->WriteMem(addr,1, (int)buffer[i]);
-		addr++;
-	}
+    char* buffer = new char[size];
 
-	DEBUG('z', "Size of string = %d\n", size);
-	machine->WriteRegister(2,size);
-	bzero(buffer, sizeof(char) * size);
+    for(int i = 0; i < size; i++)
+    {
+        buffer[i] = synchronizedConsole->GetChar();
+    }
+    buffer[size] = '\0';
+    for(int i = 0; i < size; i++)
+    {
+        if(!machine->WriteMem(addr + i,1, (int)buffer[i]))
+        {
+            machine->WriteMem(addr + i,1, (int)buffer[i]);
+            // first WriteMem may fail since the page might not be in memory
+        }
+    }
 
-	PCForward();
+    DEBUG('z', "Size of string = %d\n", size);
+    machine->WriteRegister(2,size);
 
-	return;
+
+    DEBUG('z', "got :  %s\n", buffer);
+
+    bzero(buffer, sizeof(char) * size);
+
+    synchronizedConsole->ReleaseLock();
+
+    return;
 }
 
 
 void
 SysCallWriteHandler()
 {
-	unsigned int addr = machine->ReadRegister(4);
-	unsigned int size = machine->ReadRegister(5);
+    unsigned int addr = machine->ReadRegister(4);
+    unsigned int size = machine->ReadRegister(5);
 
-	char* buffer = new char[size];
-	for(int i = 0; i < size; i++)
-	{
-		int c;
-		machine->ReadMem(addr, 1, &c);
-		buffer[i] = (char)c;
-	}
+    synchronizedConsole->GetLock();
+    for(int i = 0; i < size; i++)
+    {
+        int c;
+        if(!machine->ReadMem(addr + i, 1, &c))
+        {
+            machine->ReadMem(addr + i, 1, &c);
+            // first ReadMem may fail since the page might not be in memory
+        }
+        synchronizedConsole->PutChar((char)c);
+    }
+    synchronizedConsole->PutChar('\n');
 
-	for(int i = 0; i < size; i++)
-	{
-		_console->PutChar(buffer[i]);
-		_writeDone->P();
-	}
+    synchronizedConsole->ReleaseLock();
 
-	PCForward();
+    return;
+}
 
-	return;
+
+void
+PageFaultExceptionHandler()
+{
+    unsigned virtualAddress = machine->ReadRegister(BadVAddrReg); // register no. 39
+    // the address for which PageFaultException was raised
+
+    unsigned pageNumber = virtualAddress / PageSize;
+    // this page is to be loaded into main memory (RAM)
+
+    DEBUG('x', "\n\n\n");
+    DEBUG('x', "***********************************************************************\n");
+    DEBUG('x', "***********************************************************************\n\n");
+    DEBUG('x', "From exception.cc :\n");
+    DEBUG('x', "Page Fault\n");
+    DEBUG('x', "process: %d, virtAddr: %u, vpn: %u\n\n", currentThread->threadID, virtualAddress, pageNumber);
+
+    currentThread->space->LoadPage(pageNumber);
+
+    stats->numPageFaults++;
 }

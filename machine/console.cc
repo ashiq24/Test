@@ -40,29 +40,23 @@ Console::Console(const char *readFile, const char *writeFile,
 		VoidFunctionPtr readAvail, 
 		VoidFunctionPtr writeDone, void* callArg)
 {
-    printf("now\n");
     if (readFile == NULL)
 	readFileNo = 0;					// keyboard = stdin
     else
     	readFileNo = OpenForReadWrite(readFile, true);	// should be read-only
-    printf("now\n");
     if (writeFile == NULL)
 	writeFileNo = 1;				// display = stdout
     else
     	writeFileNo = OpenForWrite(writeFile);
-    printf("now\n");
+
     // set up the stuff to emulate asynchronous interrupts
     writeHandler = writeDone;
     readHandler = readAvail;
     handlerArg = callArg;
     putBusy = false;
     incoming = EOF;
-    printf("now\n");
+
     // start polling for incoming packets
-    if( interrupt==NULL)
-    {
-        printf("Problem is here\n");
-    }
     interrupt->Schedule(ConsoleReadPoll, this, ConsoleTime, ConsoleReadInt);
 }
 

@@ -1,69 +1,27 @@
-#include "synch.h"
-#include "bitmap.h"
+#ifndef PROCESSTABLE_H
+#define PROCESSTABLE_H
+
+#include "copyright.h"
+#include "utility.h"
 
 class ProcessTable
 {
 public:
-    void** arr;
+    void** arrayOfThreadPointers; // the processes
     int nProcesses;
-	int tableSize;
-	Lock* pTableLock;
+    int tableSize;
 
-    ProcessTable(int size)
-    {
-        arr = new void*[size+1];
+    ProcessTable(int size);
 
-        for(int i = 1; i <= size; i++) arr[i] = NULL;
+    ~ProcessTable();
 
-        nProcesses = 0;
-		tableSize = size;
+    int Alloc(void* object);
 
-		pTableLock = new Lock("pTableLock");
-    }
+    void* Get(int index);
 
-    int Alloc(void* object)
-    {
-		pTableLock->Acquire();
-		int ret = -1;
+    void Release(int index);
 
-        for(int i = 1; i <= tableSize; i++)
-        {
-            if(arr[i] == NULL)
-            {
-                arr[i] = object;
-                nProcesses++;
-                ret = i;
-				break;
-            }
-        }
-		pTableLock->Release();
-		return ret;
-
-    }
-
-    void* Get(int index)
-    {
-		pTableLock->Acquire();
-
-        if(arr[index] != NULL)
-        {
-			pTableLock->Release();
-            return arr[index];
-        }
-
-		pTableLock->Release();
-        return NULL;
-    }
-
-    void Release(int index)
-    {
-        pTableLock->Acquire();
-		arr[index] = NULL;
-        nProcesses--;
-		pTableLock->Release();
-
-		return;
-    }
+    int GetProcessCount();
 };
 
-extern ProcessTable* pTable;
+#endif //PROCESSTABLE_H

@@ -1,7 +1,7 @@
 // list.h 
 //	Data structures to manage LISP-like lists.  
 //
-//   As in LISP, a list can contain any type of data structure
+//      As in LISP, a list can contain any type of data structure
 //	as an item on the list: thread control blocks, 
 //	pending interrupts, etc. 
 //
@@ -24,12 +24,12 @@
 template <class Item>
 class ListElement {
    public:
-   ListElement(Item itemPtr, int sortKey);	// initialize a list element
+     ListElement(Item itemPtr, int sortKey);	// initialize a list element
 
-   ListElement *next;		// next element on list, 
+     ListElement *next;		// next element on list, 
 				// NULL if this is the last
-   int key;		   	// priority, for a sorted list
-   Item item; 	   	// item on the list
+     int key;		    	// priority, for a sorted list
+     Item item; 	    	// item on the list
 };
 
 // The following class defines a "list" -- a singly linked list of
@@ -41,26 +41,26 @@ class ListElement {
 template <class Item>
 class List {
   public:
-   List();			// initialize the list
-   ~List();			// de-allocate the list
+    List();			// initialize the list
+    ~List();			// de-allocate the list
 
-   void Prepend(Item item); 	// Put item at the beginning of the list
-   void Append(Item item); 	// Put item at the end of the list
-   Item Remove(); 	 	// Take item off the front of the list
+    void Prepend(Item item); 	// Put item at the beginning of the list
+    void Append(Item item); 	// Put item at the end of the list
+    Item Remove(); 	 	// Take item off the front of the list
 
-   void Apply(void (*func)(Item));	// Apply "func" to all elements in list 
+    void Apply(void (*func)(Item));	// Apply "func" to all elements in list 
 
-   bool IsEmpty();		// is the list empty? 
-   
+    bool IsEmpty();		// is the list empty? 
+    
 
-   // Routines to put/get items on/off list in order (sorted by key)
-   void SortedInsert(Item item, int sortKey);	// Put item into list
-   Item SortedRemove(int *keyPtr); 	  	// Remove first item from list
+    // Routines to put/get items on/off list in order (sorted by key)
+    void SortedInsert(Item item, int sortKey);	// Put item into list
+    Item SortedRemove(int *keyPtr); 	  	// Remove first item from list
 
   private:
-   typedef ListElement<Item> ListNode;
-   ListNode *first;  		// Head of the list, NULL if list is empty
-   ListNode *last;		// Last element of list
+    typedef ListElement<Item> ListNode;
+    ListNode *first;  		// Head of the list, NULL if list is empty
+    ListNode *last;		// Last element of list
 };
 
 //----------------------------------------------------------------------
@@ -74,9 +74,9 @@ class List {
 template <class Item>
 ListElement<Item>::ListElement(Item anItem, int sortKey)
 {
-   item = anItem;
-   key = sortKey;
-   next = NULL;	// assume we'll put it at the end of the list 
+     item = anItem;
+     key = sortKey;
+     next = NULL;	// assume we'll put it at the end of the list 
 }
 
 //----------------------------------------------------------------------
@@ -88,7 +88,7 @@ ListElement<Item>::ListElement(Item anItem, int sortKey)
 template <class Item>
 List<Item>::List()
 { 
-   first = last = NULL; 
+    first = last = NULL; 
 }
 
 //----------------------------------------------------------------------
@@ -104,18 +104,18 @@ List<Item>::List()
 template <class Item>
 List<Item>::~List()
 { 
-   // delete all the list elements
-   while ( !IsEmpty() ) {
-   Remove();
-   }
+    // delete all the list elements
+    while ( !IsEmpty() ) {
+      Remove();
+    }
 }
 
 //----------------------------------------------------------------------
 // List::Append
-//   Append an "item" to the end of the list.
-//   
+//      Append an "item" to the end of the list.
+//      
 //	Allocate a ListElement to keep track of the item.
-//   If the list is empty, then this will be the only element.
+//      If the list is empty, then this will be the only element.
 //	Otherwise, put it at the end.
 //
 //	"item" is the thing to put on the list, it can be a pointer to 
@@ -126,23 +126,23 @@ template <class Item>
 void
 List<Item>::Append(Item item)
 {
-   ListNode *element = new ListNode(item, 0);
+    ListNode *element = new ListNode(item, 0);
 
-   if (IsEmpty()) {		// list is empty
+    if (IsEmpty()) {		// list is empty
 	first = element;
 	last = element;
-   } else {			// else put it after last
+    } else {			// else put it after last
 	last->next = element;
 	last = element;
-   }
+    }
 }
 
 //----------------------------------------------------------------------
 // List::Prepend
-//   Put an "item" on the front of the list.
-//   
+//      Put an "item" on the front of the list.
+//      
 //	Allocate a ListElement to keep track of the item.
-//   If the list is empty, then this will be the only element.
+//      If the list is empty, then this will be the only element.
 //	Otherwise, put it at the beginning.
 //
 //	"item" is the thing to put on the list, it can be a pointer to 
@@ -153,20 +153,20 @@ template <class Item>
 void
 List<Item>::Prepend(Item item)
 {
-   ListNode *element = new ListNode(item, 0);
+    ListNode *element = new ListNode(item, 0);
 
-   if (IsEmpty()) {		// list is empty
+    if (IsEmpty()) {		// list is empty
 	first = element;
 	last = element;
-   } else {			// else put it before first
+    } else {			// else put it before first
 	element->next = first;
 	first = element;
-   }
+    }
 }
 
 //----------------------------------------------------------------------
 // List::Remove
-//   Remove the first "item" from the front of the list.
+//      Remove the first "item" from the front of the list.
 // 
 // Returns:
 //	Pointer to removed item, NULL if nothing on the list.
@@ -176,7 +176,7 @@ template <class Item>
 Item
 List<Item>::Remove()
 {
-   return SortedRemove(NULL);  // Same as SortedRemove, but ignore the key
+    return SortedRemove(NULL);  // Same as SortedRemove, but ignore the key
 }
 
 //----------------------------------------------------------------------
@@ -191,33 +191,33 @@ template <class Item>
 void
 List<Item>::Apply(void (*func)(Item))
 {
-   for (ListNode *ptr = first; ptr != NULL; ptr = ptr->next) {
-   func(ptr->item);
-   }
+    for (ListNode *ptr = first; ptr != NULL; ptr = ptr->next) {
+       func(ptr->item);
+    }
 }
 
 //----------------------------------------------------------------------
 // List::IsEmpty
-//   Returns true if the list is empty (has no items).
+//      Returns true if the list is empty (has no items).
 //----------------------------------------------------------------------
 
 template <class Item>
 bool
 List<Item>::IsEmpty() 
 { 
-   if (first == NULL)
-   return true;
-   else
+    if (first == NULL)
+        return true;
+    else
 	return false; 
 }
 
 //----------------------------------------------------------------------
 // List::SortedInsert
-//   Insert an "item" into a list, so that the list elements are
+//      Insert an "item" into a list, so that the list elements are
 //	sorted in increasing order by "sortKey".
-//   
+//      
 //	Allocate a ListElement to keep track of the item.
-//   If the list is empty, then this will be the only element.
+//      If the list is empty, then this will be the only element.
 //	Otherwise, walk through the list, one element at a time,
 //	to find where the new item should be placed.
 //
@@ -230,32 +230,32 @@ template <class Item>
 void
 List<Item>::SortedInsert(Item item, int sortKey)
 {
-   ListNode *element = new ListNode(item, sortKey);
-   ListNode *ptr;		// keep track
+    ListNode *element = new ListNode(item, sortKey);
+    ListNode *ptr;		// keep track
 
-   if (IsEmpty()) {	// if list is empty, put
-   first = element;
-   last = element;
-   } else if (sortKey < first->key) {	
+    if (IsEmpty()) {	// if list is empty, put
+        first = element;
+        last = element;
+    } else if (sortKey < first->key) {	
 		// item goes on front of list
 	element->next = first;
 	first = element;
-   } else {		// look for first elt in list bigger than item
-   for (ptr = first; ptr->next != NULL; ptr = ptr->next) {
-   if (sortKey < ptr->next->key) {
+    } else {		// look for first elt in list bigger than item
+        for (ptr = first; ptr->next != NULL; ptr = ptr->next) {
+            if (sortKey < ptr->next->key) {
 		element->next = ptr->next;
-	   ptr->next = element;
+	        ptr->next = element;
 		return;
-	   }
+	    }
 	}
 	last->next = element;		// item goes at end of list
 	last = element;
-   }
+    }
 }
 
 //----------------------------------------------------------------------
 // List::SortedRemove
-//   Remove the first "item" from the front of a sorted list.
+//      Remove the first "item" from the front of a sorted list.
 // 
 // Returns:
 //	Pointer to removed item, NULL if nothing on the list.
@@ -270,22 +270,22 @@ template <class Item>
 Item
 List<Item>::SortedRemove(int *keyPtr)
 {
-   ListNode *element = first;
+    ListNode *element = first;
 
-   if (IsEmpty()) 
+    if (IsEmpty()) 
 	return Item();
 
-   Item thing = first->item;
-   if (first == last) {	// list had one item, now has none 
-   first = NULL;
+    Item thing = first->item;
+    if (first == last) {	// list had one item, now has none 
+        first = NULL;
 	last = NULL;
-   } else {
-   first = element->next;
-   }
-   if (keyPtr != NULL)
-   *keyPtr = element->key;
-   delete element;
-   return thing;
+    } else {
+        first = element->next;
+    }
+    if (keyPtr != NULL)
+        *keyPtr = element->key;
+    delete element;
+    return thing;
 }
 
 

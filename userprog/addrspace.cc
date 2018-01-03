@@ -17,9 +17,12 @@
 
 #include "copyright.h"
 #include "system.h"
-#include "addrspace.h"
-#include "noff.h"
+#include "addrspace.h" // this includes memoryManager
 #include "memoryManager.h"
+#include "processTable.h"
+#include <sstream>
+
+extern MemoryManager* memoryManager;
 
 //----------------------------------------------------------------------
 // SwapHeader
@@ -59,10 +62,14 @@ SwapHeader (NoffHeader *noffH)
 //	"executable" is the file containing the object code to load into memory
 //----------------------------------------------------------------------
 
-AddrSpace::AddrSpace(OpenFile *executable)
+AddrSpace::AddrSpace(OpenFile *executable, int spaceID)
 {
-    NoffHeader noffH;
-    unsigned int i, size, allocatedPhysPage;
+
+	this->executable = executable;
+	this->spaceID = spaceID;
+
+	NoffHeader noffH;
+    unsigned int i, size;
 
     executable->ReadAt((char *)&noffH, sizeof(noffH), 0);
     if ((noffH.noffMagic != NOFFMAGIC) &&
@@ -70,60 +77,29 @@ AddrSpace::AddrSpace(OpenFile *executable)
     	SwapHeader(&noffH);
     ASSERT(noffH.noffMagic == NOFFMAGIC);
 
-// how big is address space?
+	// how big is address space?
     size = noffH.code.size + noffH.initData.size + noffH.uninitData.size
 			+ UserStackSize;	// we need to increase the size
-						// to leave room for the stack
+								// to leave room for the stack
     numPages = divRoundUp(size, PageSize);
     size = numPages * PageSize;
 
-    ASSERT(numPages <= memoryManager->GetAvailableMemory());		// check we're not trying
-						// to run anything too big --
-						// at least until we have
-						// virtual memory
-
-    DEBUG('a', "Initializing address space, num pages %d, size %d\n",
-					numPages, size);
-
-
+	swapFile = new SwapFile(spaceID, numPages);
 
 // ===========================================================================
 // first, set up the translation
     pageTable = new TranslationEntry[numPages];
     for (i = 0; i < numPages; i++)
     {
-        pageTable[i].virtualPage = i;	// for now, virtual page # = phys page #
-        pageTable[i].physicalPage = memoryManager->AllocPage();
-        pageTable[i].valid = true;
+        pageTable[i].virtualPage = i;
+        pageTable[i].physicalPage = -1;
+        pageTable[i].valid = false;
         pageTable[i].use = false;
         pageTable[i].dirty = false;
         pageTable[i].readOnly = false;  // if the code segment was entirely on
                                         // a separate page, we could set its
                                         // pages to be read-only
     }
-
-    for(i=0; i<numPages; i++)
-	{
-		bzero( &(machine->mainMemory[pageTable[i].physicalPage * PageSize]), PageSize );
-	}
-
-
-	int nInitPages = divRoundUp((noffH.code.size + noffH.initData.size), PageSize);												//& init data section into
-
-	if (noffH.code.size > 0 || noffH.initData.size > 0)
-    {
-        printf("%d -- %d \n",noffH.code.virtualAddr ,noffH.code.size);
-        printf("%d -- %d \n",noffH.initData.virtualAddr ,noffH.initData.size);
-        int baseAddr = noffH.code.inFileAddr;
-
-        for (int i = 0; i < nInitPages; i++)
-        {
-            executable -> ReadAt(&(machine -> mainMemory[pageTable[i].physicalPage * PageSize]),
-                            PageSize, baseAddr + i * PageSize);
-        }
-
-    }
-
 }
 
 //----------------------------------------------------------------------
@@ -133,7 +109,9 @@ AddrSpace::AddrSpace(OpenFile *executable)
 
 AddrSpace::~AddrSpace()
 {
-   delete pageTable;
+   delete [] pageTable;
+   delete executable;			// close file
+   delete swapFile;
 }
 
 //----------------------------------------------------------------------
@@ -193,27 +171,89 @@ void AddrSpace::RestoreState()
     machine->pageTableSize = numPages;
 }
 
-int AddrSpace::getThreadID()
-{
-    return threadID;
-}
-
-void AddrSpace::setThreadID(int id)
-{
-    threadID = id;
-}
-
 void AddrSpace::ReleaseMemory()
 {
-	for (int i = 0; i < numPages; i++)
+	for (unsigned i = 0; i < numPages; i++)
 	{
-		memoryManager->FreePage(pageTable[i].physicalPage);
+		if(pageTable[i].valid)
+		{
+			memoryManager->FreeFrame(pageTable[i].physicalPage);
+		}
 	}
 }
 
-int AddrSpace::AddrTrans ( int virtAddr)
+
+void
+AddrSpace::LoadPage(unsigned int pageNumber)
 {
-	int x;
-	x = pageTable[virtAddr/PageSize].physicalPage * PageSize + (virtAddr %PageSize);
-	return x;
+	DEBUG('x', "From addrspace.cc :\n");
+	DEBUG('x', "Requesting a page in main memory...\n\n");
+
+	int allocatedFrameNumber = memoryManager->AllocateFrame(spaceID, &pageTable[pageNumber]);
+
+	DEBUG('x', "From addrspace.cc :\n");
+	DEBUG('x', "Allocated : frame number %d\n", allocatedFrameNumber);
+
+	if(swapFile->IsStoredInSwapSpace(pageNumber))
+	{
+		DEBUG('x', "Page is present in swap space. Reading...\n");
+		swapFile->LoadIntoMemoryFromSwapSpace(pageNumber, allocatedFrameNumber);
+		DEBUG('x', "Read complete.\n\n");
+	}
+	else
+	{
+		DEBUG('x', "Page is not present in swap space. Reading from file...\n");
+		LoadIntoMemoryFromFile(pageNumber, allocatedFrameNumber);
+		swapFile->StoreInSwapSpaceFromMemory(pageNumber, allocatedFrameNumber);
+		DEBUG('x', "Read complete\n");
+		DEBUG('x', "Continuing execution...\n\n");
+	}
+
+	pageTable[pageNumber].physicalPage = allocatedFrameNumber;
+	pageTable[pageNumber].valid = true;
+
+	DEBUG('x', "***********************************************************************\n");
+	DEBUG('x', "***********************************************************************\n\n\n\n\n");
 }
+
+void
+AddrSpace::LoadIntoMemoryFromFile(unsigned int pageNumber, int allocatedFrameNumber)
+{
+	char* into = machine ->mainMemory + allocatedFrameNumber * PageSize;
+	int from = sizeof(NoffHeader) + pageNumber * PageSize;
+
+	bzero( into, PageSize );
+	// int baseAddr = noffH.code.inFileAddr;
+	executable->ReadAt(into, PageSize, from);
+}
+
+void
+AddrSpace::ForcedEvict(int pageNumber)
+{
+	int allocatedFrameNumber = pageTable[pageNumber].physicalPage;
+
+	if(pageTable[pageNumber].dirty)
+	{
+		swapFile->StoreInSwapSpaceFromMemory(pageNumber, allocatedFrameNumber);
+	}
+	else
+	{
+		// do nothing
+	}
+
+	pageTable[pageNumber].dirty = false;
+	pageTable[pageNumber].valid = false;
+
+	DEBUG('x', "From addrspace.cc :\n");
+	DEBUG('x', "Eviction complete\n\n");
+}
+
+int AddrSpace::TranslateAddress ( int virtualAddress)
+{
+	int page, offset;
+	page = pageTable[virtualAddress/PageSize].physicalPage * PageSize;
+	offset = (virtualAddress %PageSize);
+
+	return page + offset;
+}
+

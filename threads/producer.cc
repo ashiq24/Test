@@ -1,38 +1,55 @@
 #include "producer.h"
-#include "unistd.h"
 
-#define MAX_BUFFER_SIZE 15
-List<int> buffer;
-int full = 0, empty = MAX_BUFFER_SIZE;
-Lock bufAcc("Buffer Access Lock"), isEmptyLock("Lock for Buffer Empty"), isFullLock("Lock for Buffer Full");
-Condition isEmpty("Buffer is Empty", &isEmptyLock), isFull("Buffer is Full", &isFullLock);
-
-Producer::Producer(const char *debugName) {
-   name = debugName;
+Producer::Producer(const char* debugName, Lock* tableLock, Condition* produceCondition, Condition* consumeCondition, SharedBuffer* foodTable)
+{
+    name = debugName;
+    tableAccessLock = tableLock;
+    this->produceCondition = produceCondition;
+    this->consumeCondition = consumeCondition;
+    this->foodTable = foodTable;
 }
 
-Producer::~Producer() {}
+int Producer::foodNumber = 0;
 
-void Producer::produce(void *arg) {
-   const char *name = ((Producer *)arg)->name;
-   while(true) {
-      bufAcc.Acquire();
-      if(!empty) {
-         bufAcc.Release();
-         isFullLock.Acquire();
-         isFull.Wait();
-         isFullLock.Release();
-      } else {
-         int x = 5;
-         printf("Producer %s created %d\n", name, x);
-         buffer.Append(x);
-         full++;
-         empty--;
-         sleep(1);
-         bufAcc.Release();
-         isEmptyLock.Acquire();
-         isEmpty.Signal();
-         isEmptyLock.Release();
-      }
-   }
+void Producer::Produce()
+{
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);	// disable interrupts
+
+    for(long i = 0; i < PRODUCTION_DELAY; i++) {}
+
+    tableAccessLock->Acquire();
+
+    if(foodTable->IsFull())
+    {
+        printf("\n\n+++++++++++++++Table full. %s is blocked+++++++++++++++\n\n\n", currentThread->getName());
+        produceCondition->Wait();
+    }
+
+    else
+    {
+        foodTable->PutItem(foodNumber);
+        printf("[+++]   %s produced %d\n", name, foodNumber);
+        consumeCondition->Signal();
+        foodNumber++;
+    }
+
+    tableAccessLock->Release();
+
+    interrupt->SetLevel(oldLevel);		// re-enable interrupts
+
+    for(long i = 0; i < PRODUCTION_DELAY; i++) {}
+}
+
+
+void Producer::StartProducing()
+{
+    while(true)
+    {
+        Produce();
+    }
+
+//    for(int i = 0; i < 10; i++)
+//    {
+//        Produce();
+//    }
 }

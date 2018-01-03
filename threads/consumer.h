@@ -1,19 +1,27 @@
+#ifndef CONSUMER_H
+#define CONSUMER_H
+
+
+#include "system.h"
 #include "synch.h"
-#include "list.h"
+#include "sharedBuffer.h"
 
-extern List<int> buffer;
-extern int full, empty;
-extern Lock bufAcc, isEmptyLock, isFullLock;
-extern Condition isEmpty, isFull;
+class Consumer
+{
+private:
+    const char* name;                      // debugging purpose
+    Lock* tableAccessLock;                 // Permission for going to food table
+    Condition* produceCondition;
+    Condition* consumeCondition;
+    SharedBuffer* foodTable;
 
-class Consumer {
-   public:
-      Consumer(const char *debugName);
-      ~Consumer();
-      
-      static void consume(void *arg);
-      const char* getName() { return name; }
-   
-   private:
-      const char *name;
+    void Consume();
+
+public:
+    Consumer(const char* debugName, Lock* tableLock,
+             Condition* produceCondition, Condition* consumeCondition, SharedBuffer* foodTable);
+    void StartConsuming();
 };
+
+
+#endif // CONSUMER_H

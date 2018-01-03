@@ -1,57 +1,54 @@
-#include "synch.h"
-#include "bitmap.h"
+#ifndef MEMORYMANAGER_H
+#define MEMORYMANAGER_H
 
-
+#include "system.h"
 
 class MemoryManager
 {
 private:
-    BitMap *bitMap;
-	Lock* memoryLock;
+    int timeStamp;  // increased whenever a memory location is accessed.
+                    // whenever a frame is accessed, its...
+                    // ... "lastAccessTime" field set equal to...
+                    // the latest timeStamp.
+                    // thus, recently accessed pages have greater...
+                    // ... timeStamps than older pages.
+
+                    // the timeStamp is incremented in
+                    // "UpdateLastAccessTime()" method...
+                    // ... which is defined in translate.cc
+
+    int numberOfFrames;
+    int numberOfFreeFrames;
+
+    typedef struct
+    {
+        bool isOccupied;
+        int processID;
+        TranslationEntry* pageTableEntry;
+        int lastAccessTime;
+    } Frame;
+
+    Frame* frames;
 
 public:
-    MemoryManager(int nPages)
-    {
-        bitMap = new BitMap(nPages);
-		memoryLock = new Lock("memLock");
-    }
+    MemoryManager(int numberOfFrames);
 
-    int AllocPage()
-    {
-        memoryLock->Acquire();
-        int page = bitMap->Find();
-        memoryLock->Release();
-        return page;
-    }
+    ~MemoryManager();
 
-    void FreePage(int physPageNumber)
-    {
-        memoryLock->Acquire();
-        bitMap->Clear(physPageNumber);
-        memoryLock->Release();
+    int AllocateFrame(int spaceID, TranslationEntry* pageTableEntry);
 
-		return;
-    }
+    int AllocateFrameByForce();
 
-    bool PageIsAllocated(int physPageNum)
-    {
-        memoryLock->Acquire();
-        bool ret =  bitMap->Test(physPageNum);
-        memoryLock->Release();
+    int GetLRUFrameNumber();
 
-		return ret;
-    }
+    void FreeFrame(int frameNumber);
 
-    int GetAvailableMemory()
-    {
-		memoryLock->Acquire();
-        int ret = bitMap->NumClear();
-		memoryLock->Release();
+    bool FrameIsAllocated(int frameNumber);
 
-		return ret;
-    }
+    int GetAvailableMemory();
+
+    void UpdateLastAccessTime(int frameNumber);
 
 };
 
-extern MemoryManager* memoryManager;
-//extern Lock* memoryLock;
+#endif // MEMORYMANAGER_H

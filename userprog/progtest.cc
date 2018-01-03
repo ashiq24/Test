@@ -10,52 +10,71 @@
 
 #include "copyright.h"
 #include "system.h"
-#include "console.h"
-#include "addrspace.h"
-#include "synch.h"
 #include "memoryManager.h"
 #include "processTable.h"
+#include "addrspace.h"
+#include "synchronizedConsole.h"
+#include "synch.h"
 
+
+MemoryManager* memoryManager;   // the global memory manager
+// used across the kernel
+
+ProcessTable* processTable;     // the global process tableSize
+                                // used across the kernel
+                                // holds pointers to the running threads
+
+SynchronizedConsole* synchronizedConsole;
 //----------------------------------------------------------------------
 // StartProcess
 // 	Run a user program.  Open the executable, load it into
 //	memory, and jump to it.
 //----------------------------------------------------------------------
 
-MemoryManager *memoryManager;
-ProcessTable *pTable;
-
 void
 StartProcess(const char *filename)
 {
-	memoryManager = new MemoryManager(NumPhysPages);
-	pTable = new ProcessTable(NumPhysPages);
+    memoryManager       = new MemoryManager(NumPhysPages);
+    processTable        = new ProcessTable(NumPhysPages);
+    synchronizedConsole = new SynchronizedConsole();
 
-	OpenFile *executable = fileSystem->Open(filename);
-	AddrSpace *space;
+    OpenFile *executable = fileSystem->Open(filename);
+    if (executable == NULL)
+    {
+        printf("Unable to open file %s\n", filename);
+        return;
+    }
 
-	if (executable == NULL) {
-		printf("Unable to open file %s\n", filename);
-		return;
-   }
-   space = new AddrSpace(executable);
-   currentThread->space = space;
+    int returnValue = processTable->Alloc((void*)currentThread);
+    currentThread->threadID = returnValue;
 
-	delete executable;			// close file
+    if(returnValue == -1)
+    {
+        DEBUG('z', "From progtest.cc/StartProcess : Allocation in process table failed\n" );
+        exit(1);
+    }
 
-	space->InitRegisters();		// set the initial register values
-	space->RestoreState();		// load page table register
+    AddrSpace* space = new AddrSpace(executable, returnValue);   // a new address space (obviously !)
+    currentThread->space = space;
+    space->InitRegisters();		// set the initial register values
+    space->RestoreState();		// load page table register
 
-	machine->Run();			// jump to the user progam
-	ASSERT(false);			// machine->Run never returns;
-					// the address space exits
-					// by doing the syscall "exit"
+    machine->Run();			// jump to the user progam
+    ASSERT(false);			// machine->Run never returns;
+    // the address space exits
+    // by doing the syscall "exit"
 }
+
+
+
+
+
+
 
 // Data structures needed for the console test.  Threads making
 // I/O requests wait on a Semaphore to delay until the I/O completes.
 
-static Console* console;
+static Console *console;
 static Semaphore *readAvail;
 static Semaphore *writeDone;
 
@@ -64,15 +83,20 @@ static Semaphore *writeDone;
 // 	Wake up the thread that requested the I/O.
 //----------------------------------------------------------------------
 
-static void ReadAvail(void* arg) { readAvail->V(); }
-static void WriteDone(void* arg) { writeDone->V(); }
+static void ReadAvail(void* arg)
+{
+    readAvail->V();
+}
+static void WriteDone(void* arg)
+{
+    writeDone->V();
+}
 
 //----------------------------------------------------------------------
 // ConsoleTest
 // 	Test the console by echoing characters typed at the input onto
 //	the output.  Stop when the user types a 'q'.
 //----------------------------------------------------------------------
-
 
 void
 ConsoleTest (const char *in, const char *out)
@@ -83,11 +107,12 @@ ConsoleTest (const char *in, const char *out)
     readAvail = new Semaphore("read avail", 0);
     writeDone = new Semaphore("write done", 0);
 
-    for (;;) {
-	readAvail->P();		// wait for character to arrive
-	ch = console->GetChar();
-	console->PutChar(ch);	// echo it!
-	writeDone->P() ;        // wait for write to finish
-	if (ch == 'q') return;  // if q, quit
+    for (;;)
+    {
+        readAvail->P();		// wait for character to arrive
+        ch = console->GetChar();
+        console->PutChar(ch);	// echo it!
+        writeDone->P() ;        // wait for write to finish
+        if (ch == 'q') return;  // if q, quit
     }
 }

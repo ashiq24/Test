@@ -18,7 +18,7 @@ Scheduler *scheduler;			// the ready list
 Interrupt *interrupt;			// interrupt status
 Statistics *stats;			// performance metrics
 Timer *timer;				// the hardware timer device,
-					// for invoking context switches
+// for invoking context switches
 
 // 2007, Jose Miguel Santos Espino
 PreemptiveScheduler* preemptiveScheduler = NULL;
@@ -68,16 +68,8 @@ static void
 TimerInterruptHandler(void* dummy)
 {
     if (interrupt->getStatus() != IdleMode)
-	interrupt->YieldOnReturn();
+        interrupt->YieldOnReturn();
 }
-
- void _ReadAvail(void* arg) { _readAvail->V(); }
- void _WriteDone(void* arg) { _writeDone->V(); }
-
-  Console *_console;
- Semaphore *_readAvail;
-  Semaphore *_writeDone;
-
 
 //----------------------------------------------------------------------
 // Initialize
@@ -92,8 +84,6 @@ TimerInterruptHandler(void* dummy)
 void
 Initialize(int argc, char **argv)
 {
-
-
     int argCount;
     const char* debugArgs = "";
     bool randomYield = false;
@@ -114,50 +104,62 @@ Initialize(int argc, char **argv)
     int netname = 0;		// UNIX socket name
 #endif
 
-    for (argc--, argv++; argc > 0; argc -= argCount, argv += argCount) {
-	argCount = 1;
-	if (!strcmp(*argv, "-d")) {
-	    if (argc == 1)
-		debugArgs = "+";	// turn on all debug flags
-	    else {
-	    	debugArgs = *(argv + 1);
-	    	argCount = 2;
-	    }
-	} else if (!strcmp(*argv, "-rs")) {
-	    ASSERT(argc > 1);
-	    RandomInit(atoi(*(argv + 1)));	// initialize pseudo-random
-						// number generator
-	    randomYield = true;
-	    argCount = 2;
-	}
-	// 2007, Jose Miguel Santos Espino
-	else if (!strcmp(*argv, "-p")) {
-	    preemptiveScheduling = true;
-	    if (argc == 1) {
-	        timeSlice = DEFAULT_TIME_SLICE;
-	    } else {
-	        timeSlice = atoi(*(argv+1));
-	        argCount = 2;
-	    }
-	}
+    for (argc--, argv++; argc > 0; argc -= argCount, argv += argCount)
+    {
+        argCount = 1;
+        if (!strcmp(*argv, "-d"))
+        {
+            if (argc == 1)
+                debugArgs = "+";	// turn on all debug flags
+            else
+            {
+                debugArgs = *(argv + 1);
+                argCount = 2;
+            }
+        }
+        else if (!strcmp(*argv, "-rs"))
+        {
+            ASSERT(argc > 1);
+            RandomInit(atoi(*(argv + 1)));	// initialize pseudo-random
+            // number generator
+            randomYield = true;
+            argCount = 2;
+        }
+        // 2007, Jose Miguel Santos Espino
+        else if (!strcmp(*argv, "-p"))
+        {
+            preemptiveScheduling = true;
+            if (argc == 1)
+            {
+                timeSlice = DEFAULT_TIME_SLICE;
+            }
+            else
+            {
+                timeSlice = atoi(*(argv+1));
+                argCount = 2;
+            }
+        }
 #ifdef USER_PROGRAM
-	if (!strcmp(*argv, "-s"))
-	    debugUserProg = true;
+        if (!strcmp(*argv, "-s"))
+            debugUserProg = true;
 #endif
 #ifdef FILESYS_NEEDED
-	if (!strcmp(*argv, "-f"))
-	    format = true;
+        if (!strcmp(*argv, "-f"))
+            format = true;
 #endif
 #ifdef NETWORK
-	if (!strcmp(*argv, "-l")) {
-	    ASSERT(argc > 1);
-	    rely = atof(*(argv + 1));
-	    argCount = 2;
-	} else if (!strcmp(*argv, "-m")) {
-	    ASSERT(argc > 1);
-	    netname = atoi(*(argv + 1));
-	    argCount = 2;
-	}
+        if (!strcmp(*argv, "-l"))
+        {
+            ASSERT(argc > 1);
+            rely = atof(*(argv + 1));
+            argCount = 2;
+        }
+        else if (!strcmp(*argv, "-m"))
+        {
+            ASSERT(argc > 1);
+            netname = atoi(*(argv + 1));
+            argCount = 2;
+        }
 #endif
     }
 
@@ -166,7 +168,7 @@ Initialize(int argc, char **argv)
     interrupt = new Interrupt;			// start up interrupt handling
     scheduler = new Scheduler();		// initialize the ready queue
     if (randomYield)				// start the timer (if needed)
-	timer = new Timer(TimerInterruptHandler, 0, randomYield);
+        timer = new Timer(TimerInterruptHandler, 0, randomYield);
 
     threadToBeDestroyed = NULL;
 
@@ -180,7 +182,8 @@ Initialize(int argc, char **argv)
     CallOnUserAbort(Cleanup);			// if user hits ctl-C
 
     // Jose Miguel Santos Espino, 2007
-    if ( preemptiveScheduling ) {
+    if ( preemptiveScheduling )
+    {
         preemptiveScheduler = new PreemptiveScheduler();
         preemptiveScheduler->SetUp(timeSlice);
     }
@@ -201,12 +204,6 @@ Initialize(int argc, char **argv)
 #ifdef NETWORK
     postOffice = new PostOffice(netname, rely, 10);
 #endif
-
-
-
-_console = new Console("in.txt", "out.txt", _ReadAvail, _WriteDone, 0);
-_readAvail = new Semaphore("read avail", 0);
-_writeDone = new Semaphore("write done", 0);
 }
 
 //----------------------------------------------------------------------
@@ -244,3 +241,4 @@ Cleanup()
 
     Exit(0);
 }
+
